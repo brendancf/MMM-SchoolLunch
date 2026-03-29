@@ -34,6 +34,19 @@ module.exports = NodeHelper.create({
 		return property.rich_text.map((t) => t.plain_text).join("");
 	},
 
+	/**
+	 * Get the Monday ISO date (YYYY-MM-DD) for the current week.
+	 * On weekends, returns next week's Monday so the display looks ahead.
+	 */
+	getCurrentMonday() {
+		const now = new Date();
+		const day = now.getDay(); // 0=Sun, 6=Sat
+		const diff = day === 0 ? 1 : day === 6 ? 2 : -(day - 1);
+		const monday = new Date(now);
+		monday.setDate(now.getDate() + diff);
+		return monday.toISOString().split("T")[0];
+	},
+
 	fetchLunch() {
 		console.log("[MMM-SchoolLunch] Fetching lunch data from Notion...");
 		let config;
@@ -52,6 +65,8 @@ module.exports = NodeHelper.create({
 			return;
 		}
 
+		const targetMonday = this.getCurrentMonday();
+
 		const self = this;
 		fetch(`https://api.notion.com/v1/databases/${dbId}/query`, {
 			method: "POST",
@@ -61,7 +76,10 @@ module.exports = NodeHelper.create({
 				"Content-Type": "application/json",
 			},
 			body: JSON.stringify({
-				sorts: [{ property: "Week Of", direction: "descending" }],
+				filter: {
+					property: "Week Of",
+					title: { equals: targetMonday },
+				},
 				page_size: 1,
 			}),
 		})
@@ -73,26 +91,43 @@ module.exports = NodeHelper.create({
 				return response.json();
 			})
 			.then((data) => {
-				if (!data || !data.results || !data.results.length) {
-					console.error("[MMM-SchoolLunch] No results from Notion");
+				if (!data) return;
+
+				if (!data.results || !data.results.length) {
+					console.log(`[MMM-SchoolLunch] No page found for week of ${targetMonday}`);
+					self.lunchData = {
+						weekOf: targetMonday,
+						ordered: false,
+						days: {
+							Monday: "",
+							Tuesday: "",
+							Wednesday: "",
+							Thursday: "",
+							Friday: "",
+						},
+					};
+					self.sendSocketNotification("LUNCH_DATA", self.lunchData);
 					return;
 				}
 
 				const page = data.results[0];
 				const props = page.properties;
+				const days = {
+					Monday: self.getRichText(props["Monday"]),
+					Tuesday: self.getRichText(props["Tuesday"]),
+					Wednesday: self.getRichText(props["Wednesday"]),
+					Thursday: self.getRichText(props["Thursday"]),
+					Friday: self.getRichText(props["Friday"]),
+				};
+				const ordered = Object.values(days).some((v) => v && v.trim() !== "");
 
 				self.lunchData = {
-					weekOf: self.getTitle(props["Week Of"]),
-					days: {
-						Monday: self.getRichText(props["Monday"]),
-						Tuesday: self.getRichText(props["Tuesday"]),
-						Wednesday: self.getRichText(props["Wednesday"]),
-						Thursday: self.getRichText(props["Thursday"]),
-						Friday: self.getRichText(props["Friday"]),
-					},
+					weekOf: self.getTitle(props["Week Of"]) || targetMonday,
+					ordered,
+					days,
 				};
 
-				console.log(`[MMM-SchoolLunch] Loaded week of ${self.lunchData.weekOf}`);
+				console.log(`[MMM-SchoolLunch] Loaded week of ${self.lunchData.weekOf} (ordered: ${ordered})`);
 				self.sendSocketNotification("LUNCH_DATA", self.lunchData);
 			})
 			.catch((e) => {

@@ -53,6 +53,15 @@ Module.register("MMM-SchoolLunch", {
 		hr.className = "school-lunch-divider";
 		wrapper.appendChild(hr);
 
+		// No lunch ordered for this week — show warning instead of stale data
+		if (this.lunchData.ordered === false) {
+			const warning = document.createElement("div");
+			warning.className = "school-lunch-not-ordered";
+			warning.textContent = "No lunch ordered for this week!";
+			wrapper.appendChild(warning);
+			return wrapper;
+		}
+
 		const dayNames = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
 		const dayMap = { Monday: 1, Tuesday: 2, Wednesday: 3, Thursday: 4, Friday: 5 };
 

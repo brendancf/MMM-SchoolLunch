@@ -61,3 +61,10 @@
 	border-left: 3px solid #f0a030;
 	padding-left: 8px;
 }
+
+.school-lunch-not-ordered {
+	font-size: 16px;
+	font-weight: bold;
+	color: #f04040;
+	padding: 8px 0;
+}
